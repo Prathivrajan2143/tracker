@@ -11,11 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('organization', function (Blueprint $table) {
+        Schema::create('organizations', function (Blueprint $table) {
             $table->uuid('org_id')->primary();
             $table->string('org_name');
             $table->string('org_admin_email')->unique();
             $table->string('org_domain_name')->unique();
+            $table->string('temporary_password')->nullable();
+            $table->timestamp('password_expires_at')->nullable();
             $table->timestamps();
         });
     }

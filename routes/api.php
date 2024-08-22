@@ -20,4 +20,4 @@ Route::GET('/invite', function () {
 
         return 'Hello';
         
-    })->middleware('signed')->name('apiroute');
+    })->name('apiroute');

@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 class Organization extends Model
 {
     // Specify the table associated with the model
-    protected $table = 'organization';
+    protected $table = 'organizations';
 
     // Specify the primary key type and name
     protected $primaryKey = 'org_id';
@@ -52,9 +52,9 @@ class Organization extends Model
     {
         parent::boot();
 
-        static::creating(function ($organization) {
-            if (empty($organization->org_id)) {
-                $organization->org_id = (string) Str::uuid();
+        static::creating(function ($organizations) {
+            if (empty($organizations->org_id)) {
+                $organizations->org_id = (string) Str::uuid();
             }
         });
     }
