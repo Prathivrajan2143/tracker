@@ -10,12 +10,6 @@ Route::get('/user', function (Request $request) {
 
 Route::POST('/organization-invite', [OrganizationController::class, 'organizationInvite'])->name('org.invite');
 
-// Route::POST('/invite/{domain}', function () {
-
-//     return 'returned in api';
-    
-// })->name('apiroute.handle');
-
 Route::GET('/invite', function () {
 
         return 'Hello';

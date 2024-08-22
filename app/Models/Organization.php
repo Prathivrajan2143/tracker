@@ -22,6 +22,8 @@ class Organization extends Model
         'org_name',
         'org_admin_email',
         'org_domain_name',
+        'temporary_password',
+        'password_expires_at',
     ];
 
     // Define attributes that should be cast to native types

@@ -6,6 +6,7 @@ use App\Models\Organization;
 use Carbon\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
@@ -14,6 +15,7 @@ class OrganizationController extends Controller
 {
     public function organizationInvite(Request $request)
     {
+        
         try {
             // Validate the incoming request
             $validatedData = $request->validate([
@@ -30,21 +32,21 @@ class OrganizationController extends Controller
             ], 422);
         }
 
+        // Generate a temporary password
+        $temporaryPassword = $validatedData['org_domain_name'] . Str::random(10);
+        $password_expires_at = Carbon::now()->addMinutes(15)->format('Y-m-d H:i:s');
+        // $password_expires_at = '08/22/2024 03:00:00';
+        
+
         // Create a new organization record
         $organization = Organization::create([
             'org_name' => $validatedData['org_name'],
             'org_admin_email' => $validatedData['org_admin_email'],
             'org_domain_name' => $validatedData['org_domain_name'],
+            'temporary_password' => Hash::make($temporaryPassword),
+            'password_expires_at' => $password_expires_at,
         ]);
 
-        // Generate a temporary password
-        $temporaryPassword = $organization->org_domain_name . '-' . Str::random(10);
-
-        // Update the organization record with the temporary password and expiration
-        $organization->update([
-            'temporary_password' => $temporaryPassword,
-            'password_expires_at' => Carbon::now()->addMinutes(15)
-        ]);
 
         // Generate the signed invite URL
         $inviteUrl = URL::temporarySignedRoute(
