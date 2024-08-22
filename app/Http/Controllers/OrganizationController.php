@@ -35,8 +35,6 @@ class OrganizationController extends Controller
         // Generate a temporary password
         $temporaryPassword = $validatedData['org_domain_name'] . Str::random(10);
         $password_expires_at = Carbon::now()->addMinutes(15)->format('Y-m-d H:i:s');
-        // $password_expires_at = '08/22/2024 03:00:00';
-        
 
         // Create a new organization record
         $organization = Organization::create([
@@ -47,23 +45,31 @@ class OrganizationController extends Controller
             'password_expires_at' => $password_expires_at,
         ]);
 
+        if($organization)
+        {
+            // Generate the signed invite URL
+            $inviteUrl = URL::temporarySignedRoute(
+                'invite.handle',
+                now()->addMinutes(15),
+                ['domain' => $organization->org_domain_name]
+            ); 
 
-        // Generate the signed invite URL
-        $inviteUrl = URL::temporarySignedRoute(
-            'invite.handle',
-            now()->addMinutes(15),
-            ['domain' => $organization->org_domain_name]
-        ); 
+            // Send the invite email
+            Mail::to($validatedData['org_admin_email'])->send(new \App\Mail\OrganizationInvite($inviteUrl, $temporaryPassword));
 
-        // Send the invite email
-        Mail::to($validatedData['org_admin_email'])->send(new \App\Mail\OrganizationInvite($inviteUrl, $temporaryPassword));
-
-        // Return a success response
-        return response()->json([
-            'success' => true,
-            'message' => 'Organization created successfully',
-            'data' => $organization,
-        ], 201);
+            // Return a success response
+            return response()->json([
+                'success' => true,
+                'message' => 'Organization created successfully',
+                'data' => $organization,
+            ], 201);
+        }else
+        {
+            return response()->json([
+                'success' => true,
+                'message' => 'Something Went Wrong',
+            ], 500);
+        }
     }
 
 }
