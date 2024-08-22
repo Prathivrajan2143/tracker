@@ -15,7 +15,7 @@ class OrganizationController extends Controller
 {
     public function organizationInvite(Request $request)
     {
-        
+
         try {
             // Validate the incoming request
             $validatedData = $request->validate([
@@ -47,12 +47,16 @@ class OrganizationController extends Controller
 
         if($organization)
         {
-            // Generate the signed invite URL
             $inviteUrl = URL::temporarySignedRoute(
                 'invite.handle',
                 now()->addMinutes(15),
                 ['domain' => $organization->org_domain_name]
             ); 
+
+            // Set the custom base URL
+            $baseUrl = 'http://localhost:3000';
+            // Replace the base URL with the desired one
+            $inviteUrl = Str::replaceFirst(config('app.url').':8085', $baseUrl, $inviteUrl);
 
             // Send the invite email
             Mail::to($validatedData['org_admin_email'])->send(new \App\Mail\OrganizationInvite($inviteUrl, $temporaryPassword));
@@ -70,6 +74,17 @@ class OrganizationController extends Controller
                 'message' => 'Something Went Wrong',
             ], 500);
         }
+    }
+
+    public function organizationData()
+    {
+        $organizations = Organization::get();
+        
+            return response()->json([
+                'status' => 'success',
+                'data' => $organizations
+            ]);
+        
     }
 
 }

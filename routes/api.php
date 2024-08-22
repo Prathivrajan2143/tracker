@@ -10,6 +10,8 @@ Route::get('/user', function (Request $request) {
 
 Route::POST('/organization-invite', [OrganizationController::class, 'organizationInvite'])->name('org.invite');
 
+Route::GET('/organization', [OrganizationController::class, 'organizationData'])->name('organization.data');
+
 Route::GET('/invite', function () {
 
         return 'Hello';
