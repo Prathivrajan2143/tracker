@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -15,7 +18,6 @@ class OrganizationController extends Controller
 {
     public function organizationInvite(Request $request)
     {
-
         try {
             // Validate the incoming request
             $validatedData = $request->validate([
@@ -29,7 +31,7 @@ class OrganizationController extends Controller
                 'success' => false,
                 'message' => 'Validation failed',
                 'errors' => $e->errors(),
-            ], 422);
+            ], 400);
         }
 
         // Generate a temporary password
@@ -45,13 +47,12 @@ class OrganizationController extends Controller
             'password_expires_at' => $password_expires_at,
         ]);
 
-        if($organization)
-        {
+        if ($organization) {
             $inviteUrl = URL::temporarySignedRoute(
                 'invite.handle',
                 now()->addMinutes(15),
                 ['domain' => $organization->org_domain_name]
-            ); 
+            );
 
             // Set the custom base URL
             $baseUrl = 'http://localhost:3000';
@@ -67,24 +68,73 @@ class OrganizationController extends Controller
                 'message' => 'Organization created successfully',
                 'data' => $organization,
             ], 201);
-        }else
-        {
+        } else {
             return response()->json([
                 'success' => true,
                 'message' => 'Something Went Wrong',
             ], 500);
         }
+
+        
     }
 
     public function organizationData()
     {
-        $organizations = Organization::get();
-        
+        try{
+            $organizations = Organization::get(['org_id', 'org_name', 'org_admin_email', 'org_domain_name', 'created_at']);
             return response()->json([
-                'status' => 'success',
+                'status' => true,
                 'data' => $organizations
-            ]);
-        
+            ], 200);
+        } catch(Exception $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e
+            ], 200);
+        }
     }
 
+    public function urlValidate(Request $request)
+    {
+        // return $request;
+        try{
+            // Validate the signed URL
+            if (!$request->hasValidSignature()) {
+                $organization = DB::table('organizations')->where('org_domain_name', $request->domain)->first();
+                if(!$organization || !$organization->password_expires_at){
+
+                        if (!$organization || !$organization->password_expires_at) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Invalid or expired invitation.',
+                            ], 401);
+                        }
+
+                        // Check if the current time is past the expiration time
+                        if (Carbon::now()->gt(Carbon::parse($organization->password_expires_at))) {
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'Invitation has expired.',
+                            ], 401);
+                        }
+                    }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid or expired URL.',
+                ], 401);
+            }
+            else {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Valid',
+                ], 200);
+            }
+        }catch(Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e,
+            ], 401);
+        }
+
+    }
 }
