@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   db:
     image: mysql:8.0
@@ -7,11 +6,10 @@ services:
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: sq1dev
-      MYSQL_DATABASE: sq1shield_3_0
+      MYSQL_DATABASE: tracker
     volumes:
       - ./docker/mysqldata:/var/lib/mysql
       - ./docker/mysql/createDevDB.sql:/docker-entrypoint-initdb.d/init1.sql
-
   php:
     build:
       context: .

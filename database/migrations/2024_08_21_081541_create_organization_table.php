@@ -18,7 +18,11 @@ return new class extends Migration
             $table->string('org_domain_name')->unique();
             $table->string('temporary_password')->nullable();
             $table->timestamp('password_expires_at')->nullable();
+            $table->integer('otp')->nullable();
+            $table->timestamp('otp_expires_at')->nullable();
             $table->timestamps();
+
+            $table->unique(['org_admin_email', 'org_domain_name', 'otp']);
         });
     }
 

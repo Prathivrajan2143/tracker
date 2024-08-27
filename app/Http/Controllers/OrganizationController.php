@@ -2,14 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\OtpMail;
 use App\Models\Organization;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
@@ -34,45 +34,53 @@ class OrganizationController extends Controller
             ], 400);
         }
 
-        // Generate a temporary password
-        $temporaryPassword = $validatedData['org_domain_name'] . Str::random(10);
-        $password_expires_at = Carbon::now()->addMinutes(15)->format('Y-m-d H:i:s');
+        try{
+            // Generate a temporary password
+            $temporaryPassword = $validatedData['org_domain_name'] . Str::random(10);
+            $password_expires_at = Carbon::now()->addMinutes(60)->format('Y-m-d H:i:s');
 
-        // Create a new organization record
-        $organization = Organization::create([
-            'org_name' => $validatedData['org_name'],
-            'org_admin_email' => $validatedData['org_admin_email'],
-            'org_domain_name' => $validatedData['org_domain_name'],
-            'temporary_password' => Hash::make($temporaryPassword),
-            'password_expires_at' => $password_expires_at,
-        ]);
+            // Create a new organization record
+            $organization = Organization::create([
+                'org_name' => $validatedData['org_name'],
+                'org_admin_email' => $validatedData['org_admin_email'],
+                'org_domain_name' => $validatedData['org_domain_name'],
+                'temporary_password' => Crypt::encrypt($temporaryPassword),
+                'password_expires_at' => $password_expires_at,
+            ]);
 
-        if ($organization) {
-            $inviteUrl = URL::temporarySignedRoute(
-                'invite.handle',
-                now()->addMinutes(15),
-                ['domain' => $organization->org_domain_name]
-            );
+            if ($organization) {
+                $inviteUrl = URL::temporarySignedRoute(
+                    'invite.handle',
+                    now()->addMinutes(60),
+                    ['domain' => $organization->org_domain_name]
+                );
 
-            // Set the custom base URL
-            $baseUrl = 'http://localhost:3000';
-            // Replace the base URL with the desired one
-            $inviteUrl = Str::replaceFirst(config('app.url').':8085', $baseUrl, $inviteUrl);
+                // Set the custom base URL
+                $baseUrl = 'http://localhost:3000';
+                // Replace the base URL with the desired one
+                $inviteUrl = Str::replaceFirst(config('app.url').':8085', $baseUrl, $inviteUrl);
 
-            // Send the invite email
-            Mail::to($validatedData['org_admin_email'])->send(new \App\Mail\OrganizationInvite($inviteUrl, $temporaryPassword));
+                // Send the invite email
+                Mail::to($validatedData['org_admin_email'])->send(new \App\Mail\OrganizationInvite($inviteUrl, $temporaryPassword));
 
-            // Return a success response
+                // Return a success response
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Organization created successfully',
+                    'data' => $organization,
+                ], 201);
+            } else {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Something Went Wrong',
+                ], 500);
+            }
+        } catch(Exception $e) {
             return response()->json([
-                'success' => true,
-                'message' => 'Organization created successfully',
-                'data' => $organization,
-            ], 201);
-        } else {
-            return response()->json([
-                'success' => true,
+                'success' => false,
                 'message' => 'Something Went Wrong',
-            ], 500);
+                'errors' => $e,
+            ], 400);
         }
 
         
@@ -96,7 +104,6 @@ class OrganizationController extends Controller
 
     public function urlValidate(Request $request)
     {
-        // return $request;
         try{
             // Validate the signed URL
             if (!$request->hasValidSignature()) {
@@ -135,6 +142,46 @@ class OrganizationController extends Controller
                 'message' => $e,
             ], 401);
         }
+    }
 
+    public function tempLoginSendOtp(Request $request)
+    {
+        try{
+            $validatedData = $request->validate([
+                'email' => 'required|email|string',
+                'password' => 'required|string',
+            ]);   
+            
+            $orgData = Organization::where('org_admin_email', $request->email)
+            ->first();
+
+            if($request->password === Crypt::decrypt($orgData->temporary_password)) {
+                $otp = rand(10000000,100000000);
+                $otp_expires_at = Carbon::now()->addMinutes(60)->format('Y-m-d H:i:s');
+
+                // Send the invite email
+                Mail::to($validatedData['email'])->send(new OtpMail($otp));
+
+                $orgData->otp = $otp;
+                $orgData->otp_expires_at = $otp_expires_at;
+                
+                $orgData->save();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'OTP sent successfully',
+                ], 200);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid Credentials',
+                ], 401);
+            }
+        } catch(Exception $e){
+            return response()->json([
+                'success' => false,
+                'message' => 'Something Went Wrong',
+            ], 401);
+        }    
     }
 }
