@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Str;
 
 class Organization extends Model
@@ -60,4 +59,11 @@ class Organization extends Model
             }
         });
     }
+
+    // // Method to check credentials
+    // public function validateCredentials($password)
+    // {
+    //     // Check if the password matches
+    //     return $this->temporary_password === $password;
+    // }
 }
