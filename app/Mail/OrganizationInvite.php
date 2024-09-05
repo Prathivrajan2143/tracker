@@ -12,11 +12,13 @@ class OrganizationInvite extends Mailable
 
     public $inviteUrl;
     public $temporaryPassword;
+    public $admin_name;
 
-    public function __construct($inviteUrl, $temporaryPassword)
+    public function __construct($inviteUrl, $temporaryPassword, $admin_name)
     {
         $this->inviteUrl = $inviteUrl;
         $this->temporaryPassword = $temporaryPassword;
+        $this->admin_name = $admin_name;
     }
 
     public function build()
@@ -24,6 +26,7 @@ class OrganizationInvite extends Mailable
         return $this->view('emails.organization_invite')
                     ->with([
                         'inviteUrl' => $this->inviteUrl,
+                        'admin_name' => $this->admin_name,
                         'temporaryPassword' => $this->temporaryPassword,
                     ]);
     }

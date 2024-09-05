@@ -1,26 +1,29 @@
 <?php
 
-use App\Http\Controllers\OrganizationController;
-use App\Http\Controllers\OrganizationLoginController;
-use Illuminate\Http\Request;
+use App\Http\Controllers\Organization\OrganizationController;
+use App\Http\Controllers\Organization\OrganizationLoginController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
 
-Route::POST('/organization/invite', [OrganizationController::class, 'organizationInvite'])->name('org.invite');
 
-Route::GET('/organization/data', [OrganizationController::class, 'organizationData'])->name('organization.data');
- 
-Route::GET('/organization/invite/validate', [OrganizationController::class, 'urlValidate'])->name('invite.handle');
 
-Route::POST('/organization/temporary/login', [OrganizationController::class, 'tempLoginSendOtp'])->name('temporary.login');
 
-Route::POST('/organization/verify/otp', [OrganizationController::class, 'verifyOtp'])->name('verify.otp');
+Route::prefix('organization')->group(function () {
+    // Invitation routes
+    Route::post('/invite', [OrganizationController::class, 'invite']);
+    Route::get('/invite/validate', [OrganizationController::class, 'validateInvite'])->name('invite.handle');
 
-Route::POST('/organization/resend/otp', [OrganizationController::class, 'resendOtp'])->name('resend.otp');
+    // Data route
+    Route::get('/get-organizations', [OrganizationController::class, 'getOrganizations']);
 
-Route::POST('/organization/login/setup', [OrganizationLoginController::class, 'organizationLoginSetup'])->name('org.login.setup');
+    // Temporary login routes
+    Route::post('/temporary-login', [OrganizationController::class, 'temporaryLogin']);
+    Route::post('/verify-otp', [OrganizationController::class, 'verifyTemporaryLoginOtp']);
+    Route::post('/resend-otp', [OrganizationController::class, 'resendTemporaryLoginOtp']);
 
-Route::post('/organization/customized/login', [OrganizationLoginController::class, 'storeCustomizeLoginPage'])->name('store.customize.page');
+    // Login setup route
+    Route::post('/login-setup', [OrganizationLoginController::class, 'loginSetup']);
+
+    // Custom login page route
+    Route::post('/custom-login', [OrganizationLoginController::class, 'storeCustomLoginPage']);
+});

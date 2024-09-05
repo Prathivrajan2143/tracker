@@ -2,68 +2,44 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
 {
-    // Specify the table associated with the model
-    protected $table = 'organizations';
+    use HasFactory, SoftDeletes;
+    
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = ['name', 'domain_name'];
 
-    // Specify the primary key type and name
-    protected $primaryKey = 'org_id';
-    protected $keyType = 'string';
-    public $incrementing = false;
-
-    // Define the attributes that are mass assignable
-    protected $fillable = [
-        'org_id',
-        'org_name',
-        'org_admin_email',
-        'org_domain_name',
-        'temporary_password',
-        'password_expires_at',
-    ];
-
-    // Define attributes that should be cast to native types
+    /**
+     * The attributes that should be cast to native types.
+     *
+     * @var array<string, string>
+     */
     protected $casts = [
-        'org_id' => 'string',
+        'deleted_at' => 'datetime',
     ];
 
-    // Optionally, define the timestamp format
-    protected $dateFormat = 'Y-m-d H:i:s';
-
-    /**
-     * Get the value of the `org_id` attribute.
-     *
-     * @param  mixed  $value
-     * @return \Illuminate\Database\Eloquent\Casts\Attribute
+     /**
+     * Get the users for the organization.
      */
-    public function getOrgIdAttribute($value)
+    public function users()
     {
-        return (string) $value;
+        return $this->hasMany(User::class, 'organization_id');
     }
 
     /**
-     * Automatically set the UUID for the `org_id` attribute.
-     *
-     * @return void
+     * Get the authentication tokens for the organization.
      */
-    public static function boot()
+    public function temporaryCrediantials()
     {
-        parent::boot();
-
-        static::creating(function ($organizations) {
-            if (empty($organizations->org_id)) {
-                $organizations->org_id = (string) Str::uuid();
-            }
-        });
+        return $this->hasMany(TemporaryCredential::class, 'organization_id');
     }
-
-    // // Method to check credentials
-    // public function validateCredentials($password)
-    // {
-    //     // Check if the password matches
-    //     return $this->temporary_password === $password;
-    // }
+    
 }
