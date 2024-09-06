@@ -122,7 +122,7 @@ class OrganizationController extends Controller
                     
             // Generate a temporary password and its expiration time
             $temporaryPassword = preg_replace('/[^A-Za-z0-9\-]/', '', Str::random(10));
-            $password_expires_at = Carbon::now()->addMinutes(60)->format('Y-m-d H:i:s');
+            $password_expires_at = Carbon::now()->addMinutes(15)->format('Y-m-d H:i:s');
                     
             // Create a Temporary Creadiantials for new organization
             TemporaryCredential::create([
@@ -147,7 +147,7 @@ class OrganizationController extends Controller
             // Generate the invite URL
             $inviteUrl = URL::temporarySignedRoute(
                 'invite.handle',
-                now()->addMinutes(60),
+                now()->addMinutes(15),
                 ['domain' => $organization->domain_name]
             );
  
@@ -156,7 +156,7 @@ class OrganizationController extends Controller
             $inviteUrl = Str::replaceFirst(config('app.url').':8085', $baseUrl, $inviteUrl);
 
             // Send the invite email
-            Mail::to($user->email)->send(new \App\Mail\OrganizationInvite($inviteUrl, $temporaryPassword, $admin_name));
+            Mail::to($user->email)->queue(new \App\Mail\OrganizationInvite($inviteUrl, $temporaryPassword, $admin_name));
 
             // Return a success response
             return response()->json([
@@ -183,11 +183,11 @@ class OrganizationController extends Controller
  
  
  
-    /**
-     * Retrieve a list of organizations.
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
+    // /**
+    //  * Retrieve a list of organizations.
+    //  *
+    //  * @return \Illuminate\Http\JsonResponse
+    //  */
  
     public function getOrganizations()
     {
@@ -307,7 +307,7 @@ class OrganizationController extends Controller
         // Decrypt the email and password
         $decryptedEmail = $this->decryptString($request->email);
         $decryptedPassword = $this->decryptString($request->password);
- 
+
         // Validate decrypted data
         $validator = Validator::make([
             'email' => $decryptedEmail,
@@ -316,65 +316,59 @@ class OrganizationController extends Controller
             'email' => 'required|email',
             'password' => 'required',
         ]);
- 
+        
         // When Validation Faild
         if ($validator->fails()) {
             return response()->json([
                 'errors' => $validator->errors(),
             ], 422);
         }
- 
-        // try {
-           
-            // Retrive data from organizations table
-            // $orgData = Organization::where('admin_email', $decryptedEmail)
-            //     ->first(['id', 'admin_email', 'otp', 'otp_expires_at', 'temporary_password', 'password_expires_at']);
 
-         return   $organiztionData = User::select('email')
-                ->where('email', $decryptedEmail)
-                ->with(['temporaryCrediantials' => function ($query) {
-                    $query->select(
-                        'temporary_password', 
-                        )
-                        ->join('roles', 'users.role_id', '=', 'roles.id');
-                }])
-                ->get();
+        try {
+            // Retrive data from user and temporary_credentials table
+            $organizationData = User::join('temporary_credentials', 'users.id', '=', 'temporary_credentials.user_id')
+              ->select('users.id', 'users.email', 'temporary_credentials.temporary_password', 'temporary_credentials.password_expires_at', 
+                        'temporary_credentials.otp', 'temporary_credentials.otp_expires_at')
+              ->where('users.email', $decryptedEmail)
+              ->first();
+
+        } catch (Exception $e) {
+
+            // Log the exception for further debugging
+            Log::error('Failed in fetching data for temporary login function: ' . $e->getMessage());
  
-        // } catch (Exception $e) {
- 
-        //     // Log the exception for further debugging
-        //     Log::error('Failed to retrieve organizations: ' . $e->getMessage());
- 
-        //     // Return a user-friendly error response
-        //     return response()->json([
-        //         'status' => false,
-        //         'message' => 'Unable to fetch organizations at this time. Please try again later.',
-        //     ], 500);
-        // }
- 
-        // Check if the current time is past the expiration time
-        if (Carbon::now()->gt(Carbon::parse($orgData->password_expires_at))) {
+            // Return a user-friendly error response
             return response()->json([
                 'success' => false,
-                'message' => 'Invitation has expired.',
+                'message' => 'Unable to check login credentials at this time. Please try again later.',
+            ], 500);
+        }
+
+        // Check if the current time is past the expiration time
+        if (Carbon::now()->gt(Carbon::parse($organizationData->password_expires_at))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invitation has been expired.', 
             ], 401);
         }
  
         // Validate temporary password
-        if ($decryptedPassword === Crypt::decrypt($orgData->temporary_password) && $decryptedEmail === $orgData->admin_email) {
- 
+        if ($decryptedPassword === Crypt::decrypt($organizationData->temporary_password) && $decryptedEmail === $organizationData->email) {
+            
             // Generating OTP and creating otp expiry time with 15 mins
-            $otp = rand(10000000, 100000000);
-            $otp_expires_at = Carbon::now()->addMinutes(60)->format('Y-m-d H:i:s');
- 
+            $otp = rand(100000, 1000000);
+            $otp_expires_at = Carbon::now()->addMinutes(15)->format('Y-m-d H:i:s');
+            
             try {
  
-                // Send OTP email
-                Mail::to($orgData->admin_email)->send(new OtpMail($otp));
+                // Send OTP email                
+                Mail::to($organizationData->email)->queue(new OtpMail($otp));
  
-                $orgData->otp = $otp;
-                $orgData->otp_expires_at = $otp_expires_at;
-                $orgData->save();
+                $temporary_credential = TemporaryCredential::where('user_id', $organizationData->id)->first();
+
+                $temporary_credential->otp = $otp;
+                $temporary_credential->otp_expires_at = $otp_expires_at;
+                $temporary_credential->save();
  
                 return response()->json([
                     'success' => true,
@@ -411,12 +405,17 @@ class OrganizationController extends Controller
  
     public function resendTemporaryLoginOtp(Request $request)
     {
-       
-        // Validate the request
-        $validator = Validator::make($request->all(), [
+
+        // Decrypt the email and password
+        $decryptedEmail = $this->decryptString($request->email);
+
+        // Validate decrypted data
+        $validator = Validator::make([
+            'email' => $decryptedEmail,
+        ], [
             'email' => 'required|email',
         ]);
- 
+        
         // When Validation Faild
         if ($validator->fails()) {
             return response()->json([
@@ -425,40 +424,30 @@ class OrganizationController extends Controller
         }
  
         try {
- 
+
             //  Retrieve Data From Organizations Table
-            $get_organization = Organization::where('admin_email', $request->email)
-                ->first(['admin_email', 'otp', 'otp_expires_at']);
+            $get_user_credentials = User::with(['temporaryCredential' => function($query) {
+                $query->select('user_id', 'password_expires_at', 'otp');
+            }])
+            ->where('email', $decryptedEmail)
+            ->select('id', 'email') // Selecting columns from the users table
+            ->first();
  
-        } catch (Exception $e) {
- 
-            // Log the exception for further debugging
-            Log::error('Failed to retrieve organizations: ' . $e->getMessage());
- 
-            // Return a user-friendly error response
-            return response()->json([
-                'success' => false,
-                'message' => 'Unable to fetch organizations at this time. Please try again later.',
-            ], 500);
-        }
- 
-        // Check if the current time is past the expiration time
-        if (Carbon::now()->gt(Carbon::parse($get_organization->password_expires_at))) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Password has expired.',
-            ], 401);
-        }
- 
-        try {
+            // Check if the current time is past the expiration time
+            if (Carbon::now()->gt(Carbon::parse($get_user_credentials->temporaryCredential->password_expires_at))) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invitation has been expired.',
+                ], 401);
+            }
  
             // Resend the OTP email
-            Mail::to($get_organization->admin_email)->send(new OtpMail($get_organization->otp));
+            Mail::to($get_user_credentials->email)->send(new OtpMail($get_user_credentials->temporaryCredential->otp));
  
             return response()->json([
                 'success' => true,
                 'message' => 'OTP sent successfully',
-                'data' => $get_organization->otp,
+                'data' => $get_user_credentials->temporaryCredential->otp,
             ], 200);
  
         } catch (Exception $e) {
@@ -486,12 +475,19 @@ class OrganizationController extends Controller
     public function verifyTemporaryLoginOtp(Request $request)
     {
  
-        // Validate the request
-        $validator = Validator::make($request->all(), [
+        // Decrypt the email and password
+        $decryptedEmail = $this->decryptString($request->email);
+        $decryptedOTP = $this->decryptString($request->otp);
+
+        // Validate decrypted data
+        $validator = Validator::make([
+            'email' => $decryptedEmail,
+            'otp' => $decryptedOTP,
+        ], [
             'email' => 'required|email',
-            'otp' => 'required|digits:8', // Ensures OTP is exactly 8 digits long
+            'otp' => 'required|digits:6',
         ]);
- 
+        
         // When Validation Faild
         if ($validator->fails()) {
             return response()->json([
@@ -502,9 +498,12 @@ class OrganizationController extends Controller
         try {
  
             //  Retrieve Data From Organizations Table
-            $get_organization = Organization::where('admin_email', $request->email)
-                // ->where('otp', $request->otp)
-                ->first(['id', 'otp', 'otp_expires_at']);
+            $get_user_credentials = User::with(['temporaryCredential' => function($query) {
+                $query->select('id', 'user_id', 'otp', 'otp_expires_at');
+            }])
+            ->where('email', $decryptedEmail)
+            ->select('id', 'email') // Selecting columns from the users table
+            ->first();
  
         } catch (Exception $e) {
  
@@ -517,8 +516,9 @@ class OrganizationController extends Controller
                 'message' => 'Unable to fetch organizations at this time. Please try again later.',
             ], 500);
         }
+
         // Check if the OTP is expired
-        if (Carbon::now()->gt(Carbon::parse($get_organization->otp_expires_at))) {
+        if (Carbon::now()->gt(Carbon::parse($get_user_credentials->temporaryCredential->otp_expires_at))) {
             return response()->json([
                 'success' => false,
                 'message' => 'OTP has expired.',
@@ -526,20 +526,20 @@ class OrganizationController extends Controller
         }
  
         // Check if the OTP is valid
-        if ($get_organization->otp == $request->otp) {
- 
+        if ($get_user_credentials->temporaryCredential->otp === $decryptedOTP) {
+            
             // Changing the OTP Value and clear the expiration
-            $get_organization->otp = 1;
-            $get_organization->otp_expires_at = null;
-            $get_organization->save();
+            $get_user_credentials->temporaryCredential->otp = 1;
+            $get_user_credentials->temporaryCredential->otp_expires_at = null;
+            $get_user_credentials->temporaryCredential->save();
  
             // Sending success with organization id
             return response()->json([
                 'success' => true,
-                'id' => $get_organization->id,
+                'user_id' => $get_user_credentials->id,
             ]);
  
-        } else if ($get_organization->otp == 1) {   // If OTP is already verified
+        } else if ($get_user_credentials->temporaryCredential->otp == 1) {   // If OTP is already verified
  
             return response()->json([
                 'success' => true,

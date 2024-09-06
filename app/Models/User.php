@@ -67,4 +67,12 @@ class User extends Model
     {
         return $this->hasOne(Role::class);
     }
+
+    /**
+     * Get the role associated with the user.
+     */
+    public function temporaryCredential(): HasOne
+    {
+        return $this->hasOne(TemporaryCredential::class);
+    }
 }
